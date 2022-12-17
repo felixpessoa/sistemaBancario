@@ -33,6 +33,22 @@ public class WebSecurityConfig { // extends WebSecurityConfigurerAdapter {
   @Value("${spring.h2.console.path}")
   private String h2ConsolePath;
   
+  private static final String[] AUTH_WHITELIST = {
+          // -- Swagger UI v2
+          "/v2/api-docs",
+          "/swagger-resources",
+          "/swagger-resources/**",
+          "/configuration/ui",
+          "/configuration/security",
+          "/swagger-ui.html",
+          "/webjars/**",
+          // -- Swagger UI v3 (OpenAPI)
+          "/v3/api-docs/**",
+          "/swagger-ui/**",
+          // other public endpoints of your API may be appended to this array
+//          "/login"
+  };
+  
   @Autowired
   UserDetailsServiceImpl userDetailsService;
 
@@ -76,6 +92,7 @@ public class WebSecurityConfig { // extends WebSecurityConfigurerAdapter {
         .sessionManagement().sessionCreationPolicy(SessionCreationPolicy.STATELESS).and()
         .authorizeRequests().antMatchers("/api/auth/**").permitAll()
         .antMatchers("/api/test/**").permitAll()
+        .antMatchers(AUTH_WHITELIST).permitAll()
         .antMatchers(h2ConsolePath + "/**").permitAll()
         .anyRequest().authenticated();
     
