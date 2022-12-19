@@ -3,7 +3,6 @@ package com.felix.msauth.controller;
 import java.util.List;
 import java.util.stream.Collectors;
 
-import javax.servlet.http.HttpSession;
 import javax.validation.Valid;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -14,13 +13,11 @@ import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.felix.msauth.config.auth.jwt.JwtUtils;
@@ -29,8 +26,6 @@ import com.felix.msauth.dto.auth.request.SignupRequest;
 import com.felix.msauth.dto.auth.response.MessageResponse;
 import com.felix.msauth.dto.auth.response.UserInfoResponse;
 import com.felix.msauth.model.User;
-import com.felix.msauth.repository.RoleRepository;
-import com.felix.msauth.repository.UserRepository;
 import com.felix.msauth.service.UserDetailsImpl;
 import com.felix.msauth.service.UserService;
 
@@ -38,101 +33,64 @@ import com.felix.msauth.service.UserService;
 @RestController
 @RequestMapping("/api/auth")
 public class AuthController {
-  @Autowired
-  AuthenticationManager authenticationManager;
+	@Autowired
+	AuthenticationManager authenticationManager;
 
-  @Autowired
-  UserRepository userRepository;
+	@Autowired
+	JwtUtils jwtUtils;
 
-  @Autowired
-  RoleRepository roleRepository;
+	@Autowired
+	public UserService service;
 
-  @Autowired
-  PasswordEncoder encoder;
+	@PostMapping("/signin")
+	public ResponseEntity<?> authenticateUser(@Valid @RequestBody LoginRequest loginRequest) {
 
-  @Autowired
-  JwtUtils jwtUtils;
-  
-  @Autowired
-  public UserService service;
+		Authentication authentication = authenticationManager.authenticate(
+				new UsernamePasswordAuthenticationToken(loginRequest.getUsername(), loginRequest.getPassword()));
 
-  @PostMapping("/signin")
-  public ResponseEntity<?> authenticateUser(@Valid @RequestBody LoginRequest loginRequest) {
+		SecurityContextHolder.getContext().setAuthentication(authentication);
 
-    Authentication authentication = authenticationManager
-        .authenticate(new UsernamePasswordAuthenticationToken(loginRequest.getUsername(), loginRequest.getPassword()));
+		UserDetailsImpl userDetails = (UserDetailsImpl) authentication.getPrincipal();
 
-    SecurityContextHolder.getContext().setAuthentication(authentication);
+		ResponseCookie jwtCookie = jwtUtils.generateJwtCookie(userDetails);
 
-    UserDetailsImpl userDetails = (UserDetailsImpl) authentication.getPrincipal();
+		List<String> roles = userDetails.getAuthorities().stream().map(item -> item.getAuthority())
+				.collect(Collectors.toList());
 
-    ResponseCookie jwtCookie = jwtUtils.generateJwtCookie(userDetails);
+		return ResponseEntity.ok().header(HttpHeaders.SET_COOKIE, jwtCookie.toString()).body(
+				new UserInfoResponse(userDetails.getId(), userDetails.getUsername(), userDetails.getEmail(), roles));
+	}
 
-    List<String> roles = userDetails.getAuthorities().stream()
-        .map(item -> item.getAuthority())
-        .collect(Collectors.toList());
+	@PostMapping("/signup")
+	public ResponseEntity<?> registerUser(@Valid @RequestBody SignupRequest signUpRequest) {
+		// Create new user's account
+		User user = service.fromDTO(signUpRequest);
+		user = service.registerUser(user, signUpRequest.getRole());
 
-    return ResponseEntity.ok().header(HttpHeaders.SET_COOKIE, jwtCookie.toString())
-        .body(new UserInfoResponse(userDetails.getId(),
-                                   userDetails.getUsername(),
-                                   userDetails.getEmail(),
-                                   roles));
-  }
+		return ResponseEntity.ok(new MessageResponse("User registered successfully!"));
+	}
 
-  @PostMapping("/signup")
-  public ResponseEntity<?> registerUser(@Valid @RequestBody SignupRequest signUpRequest) {
-    // Create new user's account
-    User user = service.fromDTO(signUpRequest);
-    user = service.registerUser(user, signUpRequest.getRole());
- 
-    return ResponseEntity.ok(new MessageResponse("User registered successfully!"));
-  }
-  
-  @PutMapping("/signup")
-  public ResponseEntity<?> updateUser( @RequestBody SignupRequest signUpRequest) {
-	  User user = service.fromDTO(signUpRequest);
-	  user = service.update(user, signUpRequest.getRole());
-	  
-    return ResponseEntity.ok(new MessageResponse("User registered successfully!"));
-  }
-  
-  @PutMapping("/update-password")
-  public ResponseEntity<?> updatePassword(@RequestBody LoginRequest request) {
-      User user = service.getAuthenticatedUser();
-      user.setPassword(encoder.encode(request.getPassword()));
-      userRepository.save(user);
-      
-      return ResponseEntity.ok(new MessageResponse("User registered successfully!"));
-  }
+	@PutMapping("/update")
+	public ResponseEntity<?> updateUser(@RequestBody SignupRequest signUpRequest) {
+		User user = service.fromDTO(signUpRequest);
+		user = service.update(user, signUpRequest.getRole());
 
-  @PostMapping("/signout")
-  public ResponseEntity<?> logoutUser() {
-    ResponseCookie cookie = jwtUtils.getCleanJwtCookie();
-    return ResponseEntity.ok().header(HttpHeaders.SET_COOKIE, cookie.toString())
-        .body(new MessageResponse("You've been signed out!"));
-  }
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  @PostMapping("/forgotPassword")
-  public String forgotPassoword(@RequestParam String email, HttpSession session) {
-	  User user = service.getUserPorEmail(email);
-	  
-	  if(user != null) {
-		  return "reset_password";
-	  }else {
-		  session.setAttribute("msg", "invalid email.");
-		  return "forgot_password";
-	  }
-  }
-  
-  
+		return ResponseEntity.ok(new MessageResponse("User registered successfully!"));
+	}
+
+	@PutMapping("/forgot-password")
+	public ResponseEntity<?> updatePassword(@RequestBody SignupRequest signUpRequest) throws Exception {
+		service.forgotPassowrd(signUpRequest);
+
+		return ResponseEntity.ok(new MessageResponse("User registered successfully!"));
+	}
+
+	@PostMapping("/signout")
+	public ResponseEntity<?> logoutUser() {
+		ResponseCookie cookie = jwtUtils.getCleanJwtCookie();
+		return ResponseEntity.ok().header(HttpHeaders.SET_COOKIE, cookie.toString())
+				.body(new MessageResponse("You've been signed out!"));
+	}
+
+
 }

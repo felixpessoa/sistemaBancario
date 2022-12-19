@@ -2,6 +2,7 @@ package com.felix.msauth.service;
 
 import java.util.Base64;
 import java.util.HashSet;
+import java.util.Random;
 import java.util.Set;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -34,6 +35,8 @@ public class UserService {
 	private PasswordEncoder encoder;
 	@Autowired
 	JwtUtils jwtUtils;
+	@Autowired
+	EnviarEmailService enviarEmail;
 	
 	public User getUserPorEmail(String email) {
 		return userRepository.findByEmail(email).orElseThrow(() -> new ObjectNotFoundException(
@@ -91,8 +94,21 @@ public class UserService {
 		User user = new User();
 		user.setUsername(obj.getUsername());
 		user.setEmail(obj.getEmail());
-		user.setPassword(encoder.encode(obj.getPassword()));
+		user.setPassword(obj.getPassword());
 		return user;
+	}
+	
+	public User forgotPassowrd(SignupRequest obj) throws Exception {
+		
+		obj.setPassword(GenerateRandomNumber(8));
+		enviarEmail.enviarEmailComAnexo(obj);
+		
+		User user = fromDTO(obj);
+		User newUser = userRepository.findByUsername(obj.getUsername()).orElseThrow();
+		updateData(newUser, user);
+		 
+		
+		return userRepository.save(newUser);
 	}
 
 	public User update(User user, Set<String> strRoles) {
@@ -150,6 +166,12 @@ public class UserService {
 		user.setPassword(encoder.encode(newPassword));
 		userRepository.save(null);
 	}
+	
+	public String GenerateRandomNumber(int charLength) {
+        return String.valueOf(charLength < 1 ? 0 : new Random()
+                .nextInt((9 * (int) Math.pow(10, charLength - 1)) - 1)
+                + (int) Math.pow(10, charLength - 1));
+    }
 
 	private PasswordTokenPublicData readPublicData(String rawToken) {
 		String rawTokenDecoded = new String(Base64.getDecoder().decode(rawToken));
